@@ -1,0 +1,29 @@
+# This is openreplay placeholder secrets. it will be filled from external secrets
+postgresql:
+  postgresqlPassword: pg_password
+clickhouse: {}
+minio:
+  global:
+    minio:
+      accessKey: minio_access_key
+      secretKey: minio_secret_key
+global:
+  assistKey: assist_key
+  assistJWTSecret: assist_jwt_secret
+  postgresql:
+    postgresqlPassword: pg_password
+  s3:
+    accessKey: minio_access_key
+    secretKey: minio_secret_key
+  jwtSecret: jwt_secret
+  jwtSpotSecret: jwt_spot_secret
+  tokenSecret: token_secret
+  jwtRefreshSecret: jwt_refresh_secret
+  jwtSpotRefreshSecret: jwt_spot_refresh_secret
+  secretEnv:
+    AZURE_ACCOUNT_KEY: azure-account-key
+chalice:
+  env:
+    jwt_secret: jwt_secret
+    JWT_REFRESH_SECRET: jwt_refresh_secret
+    JWT_SPOT_REFRESH_SECRET: jwt_spot_refresh_secret

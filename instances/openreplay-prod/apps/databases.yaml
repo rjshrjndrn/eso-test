@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openreplay-databases
+  namespace: argocd
+
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  sources:
+    - repoURL: https://github.com/openreplay/openreplay.git
+      targetRevision: v1.26.0
+      path: scripts/helmcharts/databases
+      helm:
+        releaseName: openreplay-databases
+        valueFiles:
+          - $chart/scripts/helmcharts/vars.yaml
+          - $values/instances/openreplay-prod/vars-placeholders.yaml
+          - $values/instances/openreplay-prod/vars.yaml
+    
+    - repoURL: https://github.com/openreplay/openreplay.git
+      targetRevision: v1.26.0
+      ref: chart
+    
+    - repoURL: https://github.com/rjshrjndrn/eso-test.git
+      targetRevision: HEAD
+      ref: values
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: db
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

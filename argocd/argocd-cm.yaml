@@ -1,0 +1,33 @@
+---
+# https://github.com/argoproj/argo-cd/blob/master/docs/operator-manual/argocd-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  accounts.cloudmanager: apiKey
+  application.instanceLabelKey: app.argocd.io/instance
+  kustomize.buildOptions: --load-restrictor LoadRestrictionsNone --enable-helm
+  resource.customizations: |
+    Service:
+      ignoreDifferences: |
+        jsonPointers:
+          - /status
+    # Override the built-in Go health check for Ingress which requires
+    # status.loadBalancer.ingress to be populated. nginx-inc controller
+    # running with ClusterIP+hostPort never writes that field, causing
+    # all Ingresses to stay Progressing forever.
+    # https://github.com/argoproj/argo-cd/issues/14607
+    networking.k8s.io/Ingress:
+      health.lua: |
+        hs = {}
+        hs.status = "Healthy"
+        return hs
+  # application.resourceTrackingMethod: "annotation"
+  configManagementPlugins: |
+    - name: aws-secret-manager-plugin
+      init:
+        command: ["/bin/bash", "/usr/local/bin/fetch-and-replace-secrets.sh"]
+      generate:
+        command: ["/bin/bash", "/usr/local/bin/fetch-and-replace-secrets.sh"]

@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-sync-sa
+  namespace: app
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: eso-sync-role
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+rules:
+  - apiGroups: ["external-secrets.io"]
+    resources: ["clusterexternalsecrets"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-sync-rolebinding
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+subjects:
+  - kind: ServiceAccount
+    name: eso-sync-sa
+    namespace: app
+roleRef:
+  kind: ClusterRole
+  name: eso-sync-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eso-force-sync
+  namespace: app
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: eso-sync-sa
+      restartPolicy: Never
+      containers:
+        - name: force-sync
+          image: bitnami/kubectl:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              
+              # Check if ClusterExternalSecret exists (skip on first deploy)
+              if kubectl get clusterexternalsecret or-secrets-cluster > /dev/null 2>&1; then
+                echo "ClusterExternalSecret exists, forcing sync..."
+                kubectl annotate clusterexternalsecret or-secrets-cluster \
+                  force-sync=$(date +%s) --overwrite
+              else
+                echo "ClusterExternalSecret not found (first deploy), skipping force sync"
+                echo "Secrets will be created after ClusterExternalSecret is deployed"
+                exit 0
+              fi
+              
+              echo "Waiting for ExternalSecret to sync..."
+              for i in $(seq 1 90); do
+                STATUS=$(kubectl get externalsecret or-secrets-external -n app \
+                  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+                
+                if [ "$STATUS" = "True" ]; then
+                  echo "ExternalSecret synced successfully!"
+                  if kubectl get secret or-secrets -n app > /dev/null 2>&1; then
+                    echo "Secret or-secrets exists in app namespace"
+                    exit 0
+                  fi
+                fi
+                
+                echo "Waiting... ($i/90) Status: $STATUS"
+                sleep 2
+              done
+              
+              echo "ERROR: Timeout waiting for ExternalSecret sync"
+              kubectl get externalsecret or-secrets-external -n app -o yaml
+              exit 1
+  backoffLimit: 5

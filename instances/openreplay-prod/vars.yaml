@@ -1,0 +1,172 @@
+# This is openreplay variables file 
+deployment:
+  argo: true
+forceMigration: false
+skipMigration: false
+
+ingress-nginx: &ingress-nginx
+  controller:
+    terminationGracePeriodSeconds: 5
+    updateStrategy:
+      type: Recreate
+    service:
+      type: ClusterIP
+      externalTrafficPolicy: ""
+    hostPort:
+      enable: true
+      http: 80
+      https: 443
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+kafka:
+  enabled: true
+global:
+  # Only for ee
+  ee-components:
+    enabled: true
+  env:
+    CLICKHOUSE_TLS_SKIP_VERIFY: true
+    CLICKHOUSE_USE_TLS: true
+    CLOUD: "azure"
+    AZURE_ACCOUNT_NAME: "openrpeso"
+  ingress: *ingress-nginx
+  domainName: rjsh-eso.rjsh.me
+  orTmpDir: /var/lib/rancher/k3s/storage/tmpstorage
+  # Use ESO-managed secrets instead of Helm-generated ones
+  postgresql:
+    existingSecret: "or-secrets"
+    existingSecretPasswordKey: "postgresql-password"
+  clickhouse:
+    enabled: false
+    chHost: 172.16.0.4
+    use_tls: true
+    username: openreplay
+    service:
+      webPort: 8443 # https
+      dataPort: 9440 # TLS
+    existingSecret: "or-secrets"
+    existingSecretPasswordKey: "clickhouse-password"
+  s3:
+    existingSecret: "or-secrets"
+    assetsBucket: "openrp-assets"
+    recordingsBucket: "openrp-recordings"
+    sourcemapsBucket: "openrp-sourcemaps"
+    assistRecordsBucket: "records"
+    endpoint: "https://openrpeso.blob.core.windows.net"
+  orAppSecrets:
+    existingSecret: "or-secrets"
+  enterpriseEditionLicense: "dummy"
+  license:
+    existingSecret: "license-key"
+    existingSecretKey: "or-secrets"
+
+prometheusRemoteWritePassword: "have to change"
+canvas-handler:
+  resources:
+    limits:
+      cpu: 300m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+chalice:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+http:
+  env:
+    BEACON_SIZE_LIMIT: "5000000" 
+    RECORD_CANVAS: true
+    CANVAS_QUALITY: low
+    CANVAS_FPS: 1
+utilities:
+  cron: "0,30 * * * *"
+  efsCleaner:
+    retentionHours: 4
+
+## Databases
+minio:
+  enabled: false
+  # Use ESO-managed secrets
+  existingSecret: "or-secrets"
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+postgresql:
+  # Use ESO-managed secrets
+  existingSecret: "or-secrets"
+redis:
+  master:
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+  configmap: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+    # Streaming optimization settings
+    maxmemory 1000mb
+    maxmemory-policy allkeys-lru
+    # Stream-specific optimizations
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    # Reduce memory overhead
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    # Network optimizations for streaming
+    tcp-keepalive 60
+    timeout 300
+clickhouse:
+  existingSecret: "or-secrets"
+  existingSecretPasswordKey: "clickhouse-password"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: "2Gi"
+  configOverride:
+    serverConfig:
+      remove-logging.xml: |-
+        <clickhouse>
+          <logger>
+              <console>false</console>
+          </logger>
+          <asynchronous_metric_log remove="1"/>
+          <backup_log remove="1"/>
+          <error_log remove="1"/>
+          <metric_log remove="1"/>
+          <query_metric_log remove="1"/>
+          <query_thread_log remove="1"/>
+          <query_log remove="1"/>
+          <query_views_log remove="1"/>
+          <part_log remove="1"/>
+          <session_log remove="1"/>
+          <text_log remove="1"/>
+          <trace_log remove="1"/>
+          <crash_log remove="1"/>
+          <opentelemetry_span_log remove="1"/>
+          <zookeeper_log remove="1"/>
+          <processors_profile_log remove="1"/>
+          <latency_log remove="1"/>
+        </clickhouse>
+
+

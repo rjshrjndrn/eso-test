@@ -1,0 +1,184 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 70.4.2
+    helm:
+      releaseName: kube-prometheus-stack
+      values: |
+        fullnameOverride: prometheus
+
+        prometheus:
+          prometheusSpec:
+            retention: 10d
+            retentionSize: 10GB
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 20Gi
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+
+        alertmanager:
+          enabled: false
+
+        grafana:
+          enabled: false
+
+        kubeEtcd:
+          enabled: false
+
+        kubeControllerManager:
+          enabled: false
+
+        kubeScheduler:
+          enabled: false
+
+        kubeProxy:
+          enabled: false
+
+        nodeExporter:
+          enabled: true
+
+        prometheus-node-exporter:
+          tolerations:
+            - operator: Exists
+          hostNetwork: true
+          hostPID: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 6.29.0
+    helm:
+      releaseName: loki
+      values: |
+        deploymentMode: SingleBinary
+
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem
+          schemaConfig:
+            configs:
+              - from: "2024-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index:
+                  prefix: loki_index_
+                  period: 24h
+          limits_config:
+            retention_period: 240h
+            max_query_length: 721h
+          compactor:
+            retention_enabled: true
+            delete_request_store: filesystem
+            working_directory: /var/loki/compactor
+            compaction_interval: 10m
+            retention_delete_delay: 2h
+            retention_delete_worker_count: 150
+
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            size: 20Gi
+
+        gateway:
+          enabled: false
+
+        backend:
+          replicas: 0
+
+        read:
+          replicas: 0
+
+        write:
+          replicas: 0
+
+        chunksCache:
+          enabled: false
+
+        resultsCache:
+          enabled: false
+
+        lokiCanary:
+          enabled: false
+
+        test:
+          enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: promtail
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: promtail
+    targetRevision: 6.17.1
+    helm:
+      releaseName: promtail
+      values: |
+        config:
+          clients:
+            - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
